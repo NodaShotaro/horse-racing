@@ -1,0 +1,4 @@
+# dataはいらない
+*.csv
+*.pyc
+__pycache__
