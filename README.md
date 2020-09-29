@@ -1,6 +1,4 @@
 
-TODO  : パスワードベタ書きとかいう終わりコンテンツ直す
-
 ## crowling
 
 ### parseNetkeiba
@@ -49,4 +47,14 @@ cleanのラッパーと共通しないclean部分がここに残されてしま�
 
 ## featureEngineering
 
-特徴変換。いまは過去5走のみ。
+特徴計算。いまは過去5走+そこから作れる特徴量を割り増ししたもの。集約値は未利用。
+
+### horseHistory
+
+過去5走、直近の勝利、過去3回の勝利時の特徴を付与
+
+### calcFeatures
+
+もとの特徴＋HorseHistoryから作れる特徴を雑多に詰め込んだ
+
+## 
