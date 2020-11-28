@@ -3,13 +3,12 @@ import numpy as np
 
 def join(df_h,df_r):
 
-       df_h.drop(['天気','枠番', '馬番', 'オッズ', '人気','不利',"出遅れ","ﾀｲﾑ指数","距離カテゴリ",
+       df_h.drop(['天気','枠番',"馬番", 'オッズ', '人気','不利',"出遅れ","ﾀｲﾑ指数","距離カテゴリ",
               '着順', '騎手', '斤量', '距離', '馬場', 'タイム', '通過', '上り', '馬体重',
               '賞金','コースの種類', 'ペース(前半)', 'ペース(後半)',
               '馬体重の差分'],axis=1,inplace=True)
 
        df_r.drop(["レース名"],axis=1,inplace=True)
-       df_r["レース"] = df_r["日付"].astype("str") + "-" + df_r["R"].astype("str") + "-" + df_r["開催"]
 
        print(len(df_r))
        print("馬名")
@@ -25,6 +24,42 @@ def makeCrossCategory(df):
     df["コース*馬場"] = df["コースの種類"] + df["馬場"].astype(str)
     df["コース*枠番"] = df["コースの種類"] + df["枠番"].astype(str)
 
+    # 所属系列
+    df["所属*開催"] = df["所属"] + df["開催"]
+    df["所属*距離カテゴリ"] = df["所属"] + df["距離カテゴリ"].astype("str")
+
+    return df
+
+def makeSameCondLast(df):
+    str_categories = [
+        "開催",
+        "レース条件",
+        "距離カテゴリ",
+        "コースの種類",
+        "騎手"
+    ]
+    for str_category in str_categories:
+        df["=1前"+str_category] = df[str_category] == df["1前"+str_category]
+
+    return df
+    
+def makeLastPerNow(df):
+    num_categories = [
+        "馬体重","馬体重の差分","斤量","頭数","枠番","R","距離",
+    ]
+    for num_category in num_categories:
+        df[num_category+"/1前"] = df[num_category] / df["1前"+num_category]
+        df[num_category+"-1前"] = df[num_category] - df["1前"+num_category]
+    return df
+
+def makeLastNAgg(df,dim_name,n):
+    dim_list = []    
+    for i in range(1,n+1):
+        dim_list.append(str(i)+"前"+dim_name)
+
+    df[str(n)+"走最大"+dim_name] = df[dim_list].min(axis=1)
+    df[str(n)+"走最小"+dim_name] = df[dim_list].max(axis=1)
+
     return df
 
 def calc(df):
@@ -33,36 +68,39 @@ def calc(df):
     df["日付"] = pd.to_datetime(df["日付"])
     df["生年月日"] = pd.to_datetime(df["生年月日"],format="%Y年%m月%d日")
     df["距離"] = df["距離"].astype("int")
+    df["枠番"] = df["枠番"].astype("int")
+    df["馬番"] = df["馬番"].astype("int")
+    df["年齢"] = df["年齢"].astype("int")
+    df["性別+月"] = df["性別"] + (df["日付"].dt.month).astype("str")
+
+    print(df)
 
     df = makeCrossCategory(df)
-    df["=1前コースの種類"] = df["コースの種類"] == df["1前コースの種類"]
-    df["=1前レース条件"] = df["レース条件"] == df["1前レース条件"]
+    df = makeSameCondLast(df)
+    df = makeLastPerNow(df)
 
-    df["乗替り"] = df["騎手"] == df["1前騎手"]
     df["馬番奇数"] = df["馬番"] % 2 == 1
 
-    df["2連続_距離カテゴリ"] = (df["距離"] == df["1前距離"]) & (df["コースの種類"]==df["1前コースの種類"])
-    df["3連続_距離カテゴリ"] = (df["距離"] == df["1前距離"]) & (df["コースの種類"]==df["1前コースの種類"]) & (df["距離"] == df["2前距離"]) & (df["コースの種類"]==df["2前コースの種類"])
+    # 1前の系列
+    df["1前着順-人気"] = df["1前着順"] - df["1前人気"]
 
     # 馬体重の系列
-    df["距離/1前距離"] = (df["距離"] / df["1前距離"])
     df["馬体重の差分/馬体重"] = df["馬体重の差分"] / df["馬体重"]
-    df["距離/1前距離 * 馬体重の差分/馬体重"] = df["距離/1前距離"] * df["馬体重の差分/馬体重"]
-
-    df["2前との馬体重の差分"] = df["2前馬体重"] - df["馬体重"]
-    df["3前との馬体重の差分"] = df["3前馬体重"] - df["馬体重"]
-
-    df["馬体重/2前馬体重"] = df["馬体重"] / df["2前馬体重"]
-    df["馬体重/3前馬体重"] = df["馬体重"] / df["3前馬体重"]
     df["斤量/馬体重"] = df["斤量"] / df["馬体重"]
-    df["斤量差分"] = df["斤量"] - df["1前斤量"]
 
-    df["馬体重+斤量の差分"] = df["馬体重の差分"] + df["斤量差分"]
-    df["馬体重+斤量の割合"] = (df["馬体重の差分"] + df["斤量差分"]) / (df["馬体重"] + df["斤量"])
+    df["(馬体重+斤量)-1前"] = df["馬体重-1前"] + df["斤量-1前"]
 
     df["馬体重 * 距離"] = df["距離"] * df["馬体重"]
     df["斤量 * 距離"] = df["距離"] * df["斤量"]
+    df["馬体重の差分 * 距離"] = df["距離"] * df["馬体重の差分"]
     df["斤量/馬体重 * 距離"] = df["距離"] * df["斤量/馬体重"]
+    df["距離/1前 * 馬体重の差分/馬体重"] = df["距離/1前"] * df["馬体重の差分/馬体重"]
+
+    # 枠番の系列
+    df["開催日数/枠番"] = df["開催日数"] / df["枠番"]
+    df["開催日数*枠番"] = df["開催日数"] * df["枠番"]
+    df["開催日数*枠番+R"] = df["開催日数"] * df["枠番"] + df["R"]
+    df["開催日数*枠番*R"] = df["開催日数"] * df["枠番"] * df["R"]
 
     df["獲得賞金3"] = df["1前賞金"] + df["2前賞金"] + df["3前賞金"] 
     df["獲得賞金5"] = df["1前賞金"] + df["2前賞金"] + df["3前賞金"] + df["4前賞金"] + df["5前賞金"]
@@ -72,17 +110,22 @@ def calc(df):
         for sex in sex_category:
             df.loc[df["性別"] == sex, sex + "_"+str(i)+"前レース間隔"] = df[str(i)+"前レース間隔"]
 
-    prefix = ["1前着差","2前着差","3前着差","4前着差","5前着差"]
-    df["5走最高着差"] = df[prefix].min(axis=1)
-    df["5走最低着差"] = df[prefix].max(axis=1)
-
-    prefix = ["1前ﾀｲﾑ指数","2前ﾀｲﾑ指数","3前ﾀｲﾑ指数","4前ﾀｲﾑ指数","5前ﾀｲﾑ指数"]
-    df["5走最大ﾀｲﾑ指数"] = df[prefix].max(axis=1)
-    df["5走最低ﾀｲﾑ指数"] = df[prefix].min(axis=1)
-
-    prefix = ["1前上り","2前上り","3前上り","4前上り","5前上り"]
-    df["5走最速上り"] = df[prefix].min(axis=1)
-
+    df = makeLastNAgg(df,"着差",3)
+    df = makeLastNAgg(df,"着差",5)
+    df = makeLastNAgg(df,"着順",3)
+    df = makeLastNAgg(df,"着順",5)
+    df = makeLastNAgg(df,"ﾀｲﾑ指数",3)
+    df = makeLastNAgg(df,"ﾀｲﾑ指数",5)
+    df = makeLastNAgg(df,"上り",3)
+    df = makeLastNAgg(df,"上り",5)
+    df = makeLastNAgg(df,"人気",3)
+    df = makeLastNAgg(df,"人気",5)
+    df = makeLastNAgg(df,"オッズ",3)
+    df = makeLastNAgg(df,"オッズ",5)
+    df = makeLastNAgg(df,"スタート順位",3)
+    df = makeLastNAgg(df,"スタート順位",5)
+    df = makeLastNAgg(df,"通過4",3)
+    df = makeLastNAgg(df,"通過4",5)
 
     df["1前_勝利時との斤量差分"] = df["斤量"] - df["1前_勝利時の斤量"]
     df["1前_勝利時との馬体重の差分"] = df["馬体重"] - df["1前_勝利時の馬体重"]

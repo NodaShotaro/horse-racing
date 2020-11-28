@@ -10,9 +10,6 @@ from datetime import datetime as dt
 
 #import crowlhorse as ch
 
-urlList = []
-domain = "https://db.netkeiba.com/"
-
 
 # ヘッダーの抽出
 def extractHeader(thList):
@@ -20,6 +17,25 @@ def extractHeader(thList):
     for th in thList:
         ans.append(th.text)
     return ans
+
+def replaceJockey(df):
+
+    dimName = "騎手"
+    replaceList = [
+        ["Ｓ．フォーリー","フォーリ"],
+        ["Ｍ．デムーロ","Ｍ．デム"],
+        ["Ｃ．ルメール","ルメール"],
+        ["Ｆ．ミナリク","ミナリク"],
+        ["Ａ．シュタルク","シュタル"],
+        ["Ｌ．ヒューイットソン","ヒューイ"]
+    ]
+
+    for i in range(0,len(replaceList)):
+        df[dimName] = df[dimName].str.replace(replaceList[i][0],replaceList[i][1])
+
+    df[dimName] = df[dimName].str[:4]
+    return df
+
 
 def getSession(user,ps):
 
@@ -261,28 +277,33 @@ def parseHorse(session,horse_url):
         preRaceList.append(preRace)
 
     ans = pd.DataFrame(preRaceList)
-    ans["毛色"] = result["毛色"]
+    ans = addHorseProfile(ans,result)
 
-    ans["父父"] = result["父父"]
-    ans["母父"] = result["母父"]
-    ans["父"] = result["父"]
-    ans["母母"] = result["母母"]
-    ans["母"] = result["母"]
-    ans["父母"] = result["父母"]
-    
-    ans["馬名"] = result["馬名"]
-    ans["生年月日"] = result["生年月日"]
-    ans["所属"] = result["所属"]
-
-    ans["生産者"] = result["生産者"]
-    ans["産地"] = result["産地"]
-    ans["馬主"] = result["馬主"]
-
-    ans["地方"] = result["地方"]
-    ans["国際"] = result["国際"]
-    
     return ans
 
+def addHorseProfile(df,prof_dict):
+
+    prof_features = [
+        "毛色",
+        "父父",
+        "母父",
+        "父",
+        "母母",
+        "母",
+        "父母",
+        "馬名",
+        "生年月日",
+        "所属",
+        "生産者",
+        "産地",
+        "馬主",
+        "地方",
+        "国際"
+    ]
+    for prof in prof_features:
+        df[prof] = prof_dict[prof]
+
+    return df
 
 # レース結果ページのパース
 def parseRaceResult(session,url):
@@ -360,7 +381,7 @@ def parseRaceResult(session,url):
         ans["天気"] = ""
 
     if ":" in conditionList[2] :
-        ans["馬"] = conditionList[2].split(":")[1]
+        ans["馬場"] = conditionList[2].split(":")[1]
     else :
         ans["馬場"] = ""
 
@@ -395,3 +416,284 @@ def parseRaceResult(session,url):
         ans["内外"] = "無"
 
     return pd.DataFrame(ans)
+
+
+def parseOdds(url):
+
+    result = {}
+
+    r = requests.get(url)
+    soup = BeautifulSoup(r.content,"lxml")
+
+    # オッズのパース
+    tagList = soup.find_all("table",class_="pay_table_01")[0].find_all("tr")
+
+    fukusho_odds = tagList[1].find_all("td")[1].get_text(".").replace(",","").split(".")
+
+    # 代入
+    result["複勝1"] = float(fukusho_odds[0]) / 100
+    result["複勝2"] = float(fukusho_odds[1]) / 100
+    if len(fukusho_odds) > 2:
+        result["複勝3"] = float(fukusho_odds[2]) / 100
+
+    if len(tagList) > 2:
+        wakuren_odds = tagList[2].find_all("td")[1].text.replace(",","")
+        result[tagList[2].find("th").text] = float(wakuren_odds) / 100
+
+    if len(tagList) > 3:
+        umaren_odds = tagList[3].find_all("td")[1].text.replace(",","")
+        result[tagList[3].find("th").text] = float(umaren_odds) / 100
+
+    tagList = soup.find_all("table",class_="pay_table_01")[1].find_all("tr")
+
+    if tagList:
+        
+        wide_num = tagList[0].find_all("td")[0].get_text(".").split(".")
+        wide_odds = tagList[0].find_all("td")[1].get_text(".").replace(",","").split(".")
+
+        result["ワイド1-2"] = float(wide_odds[0]) / 100
+        result["ワイド1-3"] = float(wide_odds[1]) / 100
+        result["ワイド2-3"] = float(wide_odds[2]) / 100
+
+        if len(tagList) > 1:
+            umatan_odds = tagList[1].find_all("td")[1].text.replace(",","")
+            result[tagList[1].find("th").text] = float(umatan_odds) / 100
+
+            if len(tagList) > 2:
+                sanpuku_odds = tagList[2].find_all("td")[1].text.replace(",","")
+                result[tagList[2].find("th").text] = float(sanpuku_odds) / 100
+
+                if len(tagList) > 3:
+                    santan_odds = tagList[3].find_all("td")[1].text.replace(",","")
+                    result[tagList[3].find("th").text] = float(santan_odds) / 100
+
+    # 結合用のメタデータのパース
+    
+    main = soup.find("div",class_="mainrace_data")
+    
+    race_date = dt.strptime((main.find("p",class_="smalltxt").text).split(" ")[0],"%Y年%m月%d日")
+    race_cond = main.find("p",class_="smalltxt").text.split(" ")[2].split("\xa0")[0]
+
+    active = soup.find_all("a",class_="active")
+    place = active[0].text
+    race_round = active[1].text.replace("R","")
+
+    result["日付"] = race_date
+    result["開催"] = place
+    result["R"] = race_round
+    result["レース条件"] = race_cond
+    return result
+
+
+def makePrefix(length):
+    candidates = ["父","母"]
+    prefix_list = ["父","母"]
+    tmp = []
+
+    for i in range(0,length-1):
+        for prefix in prefix_list:
+            for candidate in candidates:
+                tmp.append(prefix+candidate)
+        prefix_list = tmp
+        tmp = []
+
+    return prefix_list
+
+def convertHorseUrl2Blood(url):
+    return url.replace("horse","horse/ped")
+
+def parseBlood(session,horse_url):
+
+    r = session.get(horse_url)
+    soup = BeautifulSoup(r.content,"lxml")
+    horseName = soup.find_all("h1")[1].text.split(" ")[0].replace("\n","")
+    result = {}    
+
+    # 名前情報のフォーマッティング
+    if len(horseName) > 1:  
+        result["馬名"] = horseName
+
+    elif "外" in soup.find_all("h1")[1].text:
+        result["馬名"] = soup.find_all("h1")[1].text.split("外")[1].replace("\n","")
+    elif "地" in soup.find_all("h1")[1].text:
+        result["馬名"] = soup.find_all("h1")[1].text.split("地")[1].replace("\n","")
+    elif "父" in soup.find_all("h1")[1].text:
+        result["馬名"] = soup.find_all("h1")[1].text.split("父")[1].replace("\n","")
+    else:
+        result["馬名"] = soup.find_all("h1")[1].text.replace("\n","").replace(" ","")
+        print(result["馬名"])
+
+
+    url = convertHorseUrl2Blood(horse_url)
+    r = requests.get(url)
+    soup = BeautifulSoup(r.content,"lxml")
+
+    sire_list = [[],[],[],[],[]]
+    mare_list = [[],[],[],[],[]]
+
+    trs = soup.find("table",class_="blood_table").find_all("tr")
+
+    for i in range(0,len(trs)):
+        tds = trs[i].find_all("td")
+        tds.reverse()
+        
+        for j in range(0,len(tds)):
+            if i % (2 ** (j+1)) == 0:
+                link = tds[j].find("a")
+                if link:
+                    sire_list[j].append(link.text.replace("\n",""))
+                else:
+                    sire_list[j].append("")
+            else:
+                link = tds[j].find("a")
+                if link:
+                    mare_list[j].append(link.text.replace("\n",""))
+                else:
+                    mare_list[j].append("")
+
+    sire_list.reverse()
+    mare_list.reverse()
+    result["父"] = sire_list[0][0]
+    result["母"] = mare_list[0][0]
+
+    for i in range(1,5):
+        prefix_list = makePrefix(i)
+        for j in range(0,len(prefix_list)):
+            result[prefix_list[j]+"父"] = sire_list[i][j]
+            result[prefix_list[j]+"母"] = mare_list[i][j]
+    df = pd.DataFrame([result])
+    return df
+
+def parseTargetRace(session,url):
+
+    print(url)
+    r = session.get(url)
+    soup = BeautifulSoup(r.content,"lxml")
+
+    horseList = soup.find("table",class_="Shutuba_Table").find_all("tr")
+    horseList = horseList[2:]
+    resultList = []
+    horseUrlList = []
+    jockeyUrlList = []
+
+    domain = "https://db.netkeiba.com"
+
+    cnt = 1
+    for horse in horseList:
+
+        print(str(cnt) +"/"+ str(len(horseList)))
+        cnt = cnt +1
+
+        result = {}
+
+        cellList = horse.find_all("td")
+        result["枠番"] = cellList[0].text
+        result["馬番"] = cellList[1].text
+
+        result["馬名"] = cellList[3].find("a").text.replace("　","")
+        result["馬のURL"] = cellList[3].find("a")["href"]
+
+        result["性齢"] = cellList[4].text.replace("\n","")
+        result["斤量"] = cellList[5].text
+
+        j_url = cellList[6].find("a")["href"]
+        j_r = requests.get(j_url)
+        jsoup = BeautifulSoup(j_r.content,"lxml")
+
+        jockey_name = jsoup.find_all("h1")
+        if len(jockey_name) > 0:
+            jockey_name = jockey_name[1].text.replace("\n","").split(" ")[0]
+            result["騎手"] = jsoup.find_all("h1")[1].text.replace("\n","").split(" ")[0]
+        else:
+            result["騎手"] = cellList[6].find("a").text
+
+        b_url = cellList[7].find("a")["href"]
+        b_r = requests.get(b_url)
+        bsoup = BeautifulSoup(b_r.content,"lxml")
+        breeder_name = bsoup.find_all("h1")
+        if len(breeder_name) > 0:
+            result["調教師"] = bsoup.find_all("h1")[1].text.replace("\n","").split(" ")[0]        
+        else:
+            result["調教師"] = cellList[7].find("a").text
+
+        weight_str = cellList[8].text.replace("\n","")
+
+        if len(weight_str) > 5:
+            result["馬体重"] = weight_str.split("(")[0]
+            result["馬体重の差分"] = weight_str.split("(")[1].replace(")","")
+        else:
+            result["馬体重"] = np.nan
+            result["馬体重の差分"] = np.nan
+            
+        result["開催"] = soup.find_all("li",class_="Active")[0].text
+        resultList.append(result)
+
+    # 前処理
+    df = pd.DataFrame(resultList)
+    df["馬名"] = df["馬名"].str.strip(" ")
+    df["馬名"] = df["馬名"].str.strip("　")
+
+    date = soup.find("dd",class_="Active").text.split("(")[0]
+    df["日付"] = dt.strptime("2020年"+date,"%Y年%m/%d")
+    df["開催"] = soup.find("li",class_="Active").text
+    
+    condList = soup.find("div",class_="RaceData01").text.replace(" ","").replace("\n","").split("/")
+    df["コースの種類"] = condList[1][:1]
+
+    spanList = soup.find("div",class_="RaceData02").find_all("span")
+    df["開催日数"] = re.search(r"([0-9]+)",spanList[2].text).group()
+    df["開催回数"] = re.search(r"([0-9]+)",spanList[0].text).group()
+
+    if "右" in condList[1]:
+        df["左右"] = "右"
+    elif "左" in condList[1]:
+        df["左右"] = "左"
+    else:
+        df["左右"] = "直線"
+
+    if "外" in condList[1]:
+        df["内外"] = "外"
+    elif "内" in condList[1]:
+        df["内外"] = "内"
+    else:
+        df["内外"] = "無"
+
+    df["距離"] = re.search(r"([0-9]+)",condList[1]).group()
+    df["距離"] = df["距離"].astype("float")
+
+    if len(condList) >= 3:
+        df["天気"] = condList[2].split(":")[1]
+        df["馬場"] = condList[3].split(":")[1]
+        df["馬場"] = df["馬場"].str.replace("不","不良")
+        df["馬場"] = df["馬場"].str.replace("稍","稍重")
+    else:
+        df["天気"] = "晴"
+        df["馬場"] = "良"
+
+    df["R"] = soup.find_all("li",class_="Active")[1].text.strip("\n").strip("R")
+    df["R"] = df["R"].astype("int")
+    raceCond = soup.find_all("div",class_="RaceName")[0].text.replace("\n","")
+    df["レース名"] = raceCond
+     
+    if soup.find("span",class_="Icon_GradeType1"):
+        df["レース条件"] = "G1"
+    elif soup.find("span",class_="Icon_GradeType2"):
+        df["レース条件"] = "G2"
+    elif soup.find("span",class_="Icon_GradeType3"):
+        df["レース条件"] = "G3"
+    else:
+        if "未勝利" in raceCond:
+            df["レース条件"] = "未勝利"
+        elif "新馬" in raceCond:
+            df["レース条件"] = "新馬"
+        elif "1勝" in raceCond:
+            df["レース条件"] = "1勝"
+        elif "2勝" in raceCond:
+            df["レース条件"] = "2勝"
+        elif "3勝" in raceCond:
+            df["レース条件"] = "3勝"
+        else:
+            df["レース条件"] = "名前付き"
+
+    df = replaceJockey(df)
+    return df

@@ -3,6 +3,24 @@ import pandas as pd
 from . import clean
 from . import encode
 
+
+def cleanTarget(df):
+
+    df["日付"] = pd.to_datetime(df["日付"])
+    df["性別"] = df["性齢"].str[:1] 
+    df["年齢"] = df["性齢"].str[1:] 
+
+    df = encode.courseCategory(df)
+    df["コースと枠"] = df["開催"] +"-"+ df["内外"] +"-"+ df["コースの種類"] + "-" + df["距離"].astype("str") +"-"+ df["枠番"].astype("str")
+
+    drop_features = [
+        "馬のURL",
+        "性齢",
+    ]
+    df = clean.dropFeatures(df,drop_features,)
+
+    return df
+
 def cleanRaceData(df):
 
     df["日付"] = pd.to_datetime(df["日付"])
@@ -64,7 +82,7 @@ def cleanHorseData(df):
     df["回収"].fillna(0,inplace=True)
 
     drop_features = [
-        "馬主",         "備考",
+        "備考",
         "レースのURL",  "映像",
         "勝ち馬(2着馬)", "ペース",
         "厩舎ｺﾒﾝﾄ",

@@ -21,7 +21,6 @@ class normalizeDF:
 		return 
 
 	def registEncoder(self,ds,dimName):
-
 		tmp_ds = ds.fillna("NULL")
 		tmp_ds = ds.astype("str")
 

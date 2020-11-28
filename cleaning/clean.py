@@ -51,7 +51,6 @@ def cleanHorseWeight(df):
     df["馬体重の差分"] = df["馬体重"].str.split("(",expand=True)[1].str.replace(")","")
     df["馬体重"] = df["馬体重"].str.split("(",expand=True)[0]
     df["馬体重"] = df["馬体重"].str.replace("計不","")
-    
     return df
 
 def cleanCornerRank(df):
@@ -123,6 +122,7 @@ def cleanHorseName(df):
 
 def cleanRemarks(df):
 
+    df["備考"] = df["備考"].astype("str")
     df["出遅れ"] = df["備考"].str.contains("(出遅れ|出脚鈍い)")
     df["不利"] = df["備考"].str.contains("(不利)")
     df["出遅れ"] = df["出遅れ"].fillna(False)
@@ -148,7 +148,7 @@ def cleanCourseDist(df):
 
     df["コースの種類"] = df["距離"].str[:1]
     df["距離"] = df["距離"].str.extract(r"([0-9][0-9]+)")
-    df["距離"] = df["距離"].astype("int")
+    df["距離"] = df["距離"].astype("float")
 
     return df
 

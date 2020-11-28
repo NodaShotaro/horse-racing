@@ -19,6 +19,9 @@ def raceCond(df):
     df["buf"] = df["レース名"].str.extract(r"(2勝)")
     df.loc[df["レース条件"].isnull(),"レース条件"] = df["buf"]
 
+    df["buf"] = df["レース名"].str.extract(r"(3勝)")
+    df.loc[df["レース条件"].isnull(),"レース条件"] = df["buf"]
+
     df["buf"] = df["レース名"].str.extract(r"(G[1-3])")
     df.loc[df["レース条件"].isnull(),"レース条件"] = df["buf"]
     df.loc[df["レース条件"].isnull(),"レース条件"] = "名前付き"

@@ -2,9 +2,15 @@
 import pandas as pd
 import numpy as np
 
+def cutData(df):
+       return df[~( (df["コースの種類"]=="障") | (df["レース条件"]=="新馬"))]
+
 def splitAndSave(df):
 
        df["日付"] = pd.to_datetime(df["日付"])
+       df = cutData(df)
+       df["レース"] = df["日付"].astype("str") + "-" + df["R"].astype("str") + "-" + df["開催"]
+
        train1 = df[(df["日付"].dt.year == 2018)]
        train2 = df[(df["日付"].dt.year == 2019)]
        valid = df[(df["日付"].dt.year == 2020)]
